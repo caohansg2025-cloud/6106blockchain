@@ -17,5 +17,9 @@ def transferMoney():
 def depositMoney():
     return(render_template("depositMoney.html"))
 
+@app.route("/messageBoard", methods=["GET", "POST"])
+def messageBoard():
+    return render_template("messageBoard.html")
+
 if __name__ == "__main__":
     app.run()

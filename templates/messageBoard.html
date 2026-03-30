@@ -1,0 +1,196 @@
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{url_for('static', filename='styles.css')}}">
+</head>
+
+<body>
+    <div class="container" style="max-width: 500px;">
+        <h2>DApp Message Board</h2>
+
+        <button class="btn" onclick="connectWallet()" style="background-color: #28a745;">1. Connect Wallet</button>
+        <p id="walletAddress" style="font-size: 13px; color: #666; word-wrap: break-word;"></p>
+
+        <hr style="margin: 20px 0;">
+
+        <input type="text" id="messageInput" placeholder="Type your message here...">
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+            <button class="btn" onclick="setMessage()" style="flex: 1;">Set Message</button>
+            <button class="btn" onclick="deleteMessage()" style="flex: 1; background-color: #dc3545;">Delete</button>
+        </div>
+
+        <hr style="margin: 20px 0;">
+
+        <input type="text" id="queryAddress" placeholder="Enter user address to query">
+        <button class="btn" onclick="getMessage()" style="background-color: #17a2b8;">Get Message</button>
+
+        <div id="resultBox"
+            style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; text-align: left; display: none;">
+            <p style="margin: 5px 0; font-size: 16px; color: #333;" id="displayMessage"></p>
+            <p style="margin: 5px 0; font-size: 12px; color: #888;" id="displayTime"></p>
+        </div>
+
+        <form action="/main" method="post" style="margin-top: 20px;">
+            <input type="submit" value="Back to Main" style="background-color: #6c757d;">
+        </form>
+
+        <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+        <script>
+
+            const contractAddress = "0xD7ACd2a9FD159E69Bb102A1ca21C9a3e3A5F771B";
+            const contractABI = [
+                {
+                    "inputs": [],
+                    "name": "deleteMessage",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        {
+                            "indexed": true,
+                            "internalType": "address",
+                            "name": "user",
+                            "type": "address"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "string",
+                            "name": "text",
+                            "type": "string"
+                        },
+                        {
+                            "indexed": false,
+                            "internalType": "uint256",
+                            "name": "timestamp",
+                            "type": "uint256"
+                        }
+                    ],
+                    "name": "MessageUpdated",
+                    "type": "event"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "string",
+                            "name": "_text",
+                            "type": "string"
+                        }
+                    ],
+                    "name": "setMessage",
+                    "outputs": [],
+                    "stateMutability": "nonpayable",
+                    "type": "function"
+                },
+                {
+                    "inputs": [
+                        {
+                            "internalType": "address",
+                            "name": "_user",
+                            "type": "address"
+                        }
+                    ],
+                    "name": "getMessage",
+                    "outputs": [
+                        {
+                            "internalType": "string",
+                            "name": "",
+                            "type": "string"
+                        },
+                        {
+                            "internalType": "uint256",
+                            "name": "",
+                            "type": "uint256"
+                        }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+
+            ];
+
+            const web3 = new Web3(window.ethereum);
+            const contract = new web3.eth.Contract(contractABI, contractAddress);
+            let currentAccount = null;
+
+            // 格式化时间戳的辅助函数
+            function formatTime(timestamp) {
+                if (timestamp == 0) return "";
+                const date = new Date(timestamp * 1000);
+                return date.toLocaleString();
+            }
+
+            // Connect Wallet
+            async function connectWallet() {
+                if (window.ethereum) {
+                    try {
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        currentAccount = accounts[0];
+                        document.getElementById("walletAddress").innerText = "Connected: " + currentAccount;
+                        document.getElementById("queryAddress").value = currentAccount; // 默认填入自己的地址方便查询
+                    } catch (error) {
+                        console.error("User denied connection");
+                    }
+                } else {
+                    alert("Please install MetaMask!");
+                }
+            }
+
+            // Set Message
+            async function setMessage() {
+                if (!currentAccount) return alert("Please Connect Wallet first!");
+                const msg = document.getElementById("messageInput").value;
+                if (!msg) return alert("Message cannot be empty!");
+
+                try {
+                    await contract.methods.setMessage(msg).send({ from: currentAccount });
+                    document.getElementById("messageInput").value = "";
+                    alert("Message successfully saved to the blockchain!");
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+
+            // Get Message
+            async function getMessage() {
+                const addr = document.getElementById("queryAddress").value;
+                if (!addr) return alert("Please enter an address!");
+
+                try {
+                    // 合约返回的是一个对象，包含 0(text) 和 1(timestamp)
+                    const result = await contract.methods.getMessage(addr).call();
+                    const text = result[0];
+                    const timestamp = result[1];
+
+                    const resultBox = document.getElementById("resultBox");
+                    resultBox.style.display = "block";
+
+                    if (text === "") {
+                        document.getElementById('displayMessage').innerText = "Status: No message or deleted.";
+                        document.getElementById('displayTime').innerText = "";
+                    } else {
+                        document.getElementById('displayMessage').innerText = "Message: " + text;
+                        document.getElementById('displayTime').innerText = "Last updated: " + formatTime(timestamp);
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+
+            // Delete Message
+            async function deleteMessage() {
+                if (!currentAccount) return alert("Please Connect Wallet first!");
+                try {
+                    await contract.methods.deleteMessage().send({ from: currentAccount });
+                    alert("Your message has been deleted.");
+                    // 删完后自动刷新一下当前显示
+                    document.getElementById("queryAddress").value = currentAccount;
+                    getMessage();
+                } catch (error) {
+                    console.error(error);
+                }
+            }
+        </script>
+    </div>
+</body>
